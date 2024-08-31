@@ -49,15 +49,70 @@ MACOS_BASE_STRING = """{prefixed_cmd}
 """
 
 
-class S(object):
+class S:
+    @staticmethod
     def is_linux():  # type: ignore
         return system() == "Linux"
 
+    @staticmethod
     def is_windows():  # type: ignore
         return system() == "Windows"
 
+    @staticmethod
     def is_mac():  # type: ignore
         return system() == "Darwin"
+
+    @staticmethod
+    def ch(d: dict):
+        if temp := d.get(system()[0].lower()):
+            return temp
+        else:
+            raise Exception("Unsupported platform")
+
+    @staticmethod
+    def config_path() -> Path:
+        """get config file path"""
+        return S.ch(
+            {
+                "l": Path.home() / ".config" / "autostart",
+                "w": (
+                    Path.home()
+                    / "AppData"
+                    / "Roaming"
+                    / "Microsoft"
+                    / "Windows"
+                    / "Start Menu"
+                    / "Programs"
+                    / "Startup"
+                ),
+                "m": Path.home() / "Library" / "LaunchAgents",
+            }
+        )
+
+    @staticmethod
+    def comment_prefix():
+        """get comment prefix"""
+        return S.ch({"l": "# ", "w": "# ", "m": "<!--"})
+
+    @staticmethod
+    def comment(s: str) -> str:
+        """
+        get commented string
+        """
+        lm = lambda: f"{S.comment_prefix()}{s}"  # noqa: E731
+        return S.ch({"l": lm(), "w": lm(), "m": f"{S.comment_prefix()}{s}\n-->"})
+
+    @staticmethod
+    def open_command() -> str:
+        """
+        use the command to open config folder
+        """
+        return S.ch({"l": "xdg-open", "w": "explorer", "m": "open"})
+
+    @staticmethod
+    def file_ext():
+        """get config file extension"""
+        return S.ch({"l": ".desktop", "w": ".ps1", "m": ".plist"})
 
 
 def read_first_line(file_path):
@@ -88,20 +143,20 @@ def format_config(
         name = cmd.split(maxsplit=1)[0]
     if S.is_linux():
         return LINUX_BASE_STRING.format(
-            prefixed_cmd=comment(cmd),
+            prefixed_cmd=S.comment(cmd),
             name=name,
             cmd=cmd,
         )
     elif S.is_windows():
         return WINDOWS_BASE_STRING.format(
-            prefixed_cmd=comment(cmd),
+            prefixed_cmd=S.comment(cmd),
             cmd=cmd,
             stdout=(f"-RedirectStandardOutput {stdout}" if stdout else ""),
             stderr=(f"-RedirectStandardError {stderr}" if stderr else ""),
         )
     elif S.is_mac():
         return MACOS_BASE_STRING.format(
-            prefixed_cmd=comment(cmd),
+            prefixed_cmd=S.comment(cmd),
             name=name,
             cmd=cmd,
             stdout=(
@@ -119,70 +174,15 @@ def format_config(
         raise Exception("Unsupported platform")
 
 
-def config_path() -> Path:
-    """get config file path"""
-    if S.is_linux():
-        return Path.home() / ".config" / "autostart"
-    elif S.is_windows():
-        return (
-            Path.home()
-            / "AppData"
-            / "Roaming"
-            / "Microsoft"
-            / "Windows"
-            / "Start Menu"
-            / "Programs"
-            / "Startup"
-        )
-    elif S.is_mac():
-        return Path.home() / "Library" / "LaunchAgents"
-    else:
-        raise Exception("Unsupported platform")
-
-
-def comment_prefix():
-    """get comment prefix"""
-    if S.is_linux() or S.is_windows():
-        return "# "
-    elif S.is_mac():
-        return "<!--"
-    else:
-        raise Exception("Unsupported platform")
-
-
-def comment(s: str) -> str:
-    """
-    get commented string
-    """
-    if S.is_linux() or S.is_windows():
-        return f"{comment_prefix()}{s}"
-    elif S.is_mac():
-        return f"{comment_prefix()}{s}\n-->"
-    else:
-        raise Exception("Unsupported platform")
-
-
-def file_ext():
-    """get config file extension"""
-    if S.is_linux():
-        return ".desktop"
-    elif S.is_windows():
-        return ".ps1"
-    elif S.is_mac():
-        return ".plist"
-    else:
-        raise Exception("Unsupported platform")
-
-
 def find_writable_path(name: str) -> Path:
     """
     find a writable path for the config file. ex. name, name1, name2, ...
     """
     log.debug(f"finding writable path for `{name}`")
-    if not (p := (config_path() / name).with_suffix(file_ext())).exists():
+    if not (p := (S.config_path() / name).with_suffix(S.file_ext())).exists():
         return p
     for i in range(1, 1000):
-        p = (config_path() / f"{name}{i}").with_suffix(file_ext())
+        p = (S.config_path() / f"{name}{i}").with_suffix(S.file_ext())
         if not p.exists():
             return p
     raise Exception("TOO MANY ITEMS OF SAME NAME!")
@@ -210,19 +210,19 @@ def list_items(_):
     list all startup commands
     """
     log.debug(
-        f"finding config files in `{config_path()}` with extension `{file_ext()}`"
+        f"finding config files in `{S.config_path()}` with extension `{S.file_ext()}`"
     )
-    files = list(config_path().glob(f"*{file_ext()}"))
+    files = list(S.config_path().glob(f"*{S.file_ext()}"))
     log.debug(f"found {len(files)} config files")
     first_lines = list(
         map(
-            lambda x: read_first_line(x).removeprefix(comment_prefix()).strip(),
+            lambda x: read_first_line(x).removeprefix(S.comment_prefix()).strip(),
             files,
         )
     )
     print(LIST_BASE_STRING.format("id", "command"))
     for path, fline in zip(files, first_lines):
-        print(LIST_BASE_STRING.format(path.name.removesuffix(file_ext()), fline))
+        print(LIST_BASE_STRING.format(path.name.removesuffix(S.file_ext()), fline))
 
 
 def remove_item(item):
@@ -230,7 +230,7 @@ def remove_item(item):
     remove a startup command
     """
     id: str = item.id
-    if (p := (config_path() / id).with_suffix(file_ext())).exists():
+    if (p := (S.config_path() / id).with_suffix(S.file_ext())).exists():
         p.unlink()
         log.info(f"removed `{id}`")
     else:
@@ -240,26 +240,19 @@ def remove_item(item):
 
 
 def open_config_folder(_):
-    if S.is_linux():
-        subprocess.run(["xdg-open", str(config_path())])
-    elif S.is_windows():
-        subprocess.run(["explorer", str(config_path())])
-    elif S.is_mac():
-        subprocess.run(["open", str(config_path())])
-    else:
-        raise Exception("Unsupported platform")
+    subprocess.run([S.open_command(), str(S.config_path())])
 
 
-def main():
+def main(argv: list):
     LOGLEVEL = os.environ.get("DEBUG") or os.environ.get("debug")
     log.basicConfig(
         format="%(levelname)s: %(message)s",
         level=log.INFO if not LOGLEVEL else log.DEBUG,
     )
 
-    if S.is_linux() and not config_path().exists():
+    if S.is_linux() and not S.config_path().exists():
         log.warning("config path not found. creating it...")
-        config_path().mkdir(parents=True, exist_ok=True)
+        S.config_path().mkdir(parents=True, exist_ok=True)
 
     parser = argparse.ArgumentParser(
         description="make any command automatically run on startup"
@@ -301,16 +294,21 @@ def main():
     )
     open_config_folder_parser.set_defaults(func=open_config_folder)
 
-    if len(sys.argv) == 1:
+    if len(argv) == 0:
         parser.print_help(sys.stderr)
         exit(1)
-    args = parser.parse_args()
+    args = parser.parse_args(args=argv)
     args.func(args)
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
 
 
 class Test(unittest.TestCase):
-    pass
+    def test_add_and_remove(self):
+        main(["add", "test hello world"])
+        main(["remove", "test"])
+
+    def test_list(self):
+        main(["list"])
