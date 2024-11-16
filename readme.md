@@ -1,5 +1,9 @@
 # user-startup-py
 
+> [!CAUTION]
+> This project has been RIIR, and is no longer maintained.
+> please use [user-startup-rs](https://github.com/lxl66566/user-startup-rs) instead.
+
 A simple cross-platform python script to make your command auto run on startup!
 
 no need to install anything (except python3 runtime), no need to edit any config files, no need to be root user.
